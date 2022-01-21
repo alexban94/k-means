@@ -5,6 +5,14 @@ from tkinter.font import BOLD, Font
 from tkinter import filedialog as fd
 from tkinter.messagebox import showinfo
 
+import matplotlib
+matplotlib.use("TkAgg")
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.figure import Figure
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+import time
+
 # Class for the overall application.
 class Application(tk.Tk):
     def __init__(self):
@@ -136,6 +144,24 @@ class VisualizationFrame(tk.Frame):
                              background="black",
                              width=25,
                              height=2).pack()
+
+        # Conduct K-Means in its entirety and plot graph animation afterwards.
+
+        # Embed matplotlib graph
+        f = Figure(figsize=(5,5), dpi=100)
+        a = f.add_subplot(111)
+        a.plot([1,2,3,4,5,6,7,8], [5,6,1,3,8,9,3,5])
+
+        canvas = FigureCanvasTkAgg(figure=f, master=self)
+        canvas.get_tk_widget().pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
+
+        #toolbar = NavigationToolbar2Tk(canvas=canvas, window=self)
+        #toolbar.update()
+        #canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+    # Animation function to plot the graph.
+    def animate(self, i):
+        print("Frame: %i" % i)
 
 
 
