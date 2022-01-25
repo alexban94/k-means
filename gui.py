@@ -4,14 +4,18 @@ import tkinter.ttk as ttk
 from tkinter.font import BOLD, Font
 from tkinter import filedialog as fd
 from tkinter.messagebox import showinfo
-
 import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-from matplotlib.figure import Figure
+#from matplotlib.figure import Figure
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import time
+import numpy as np
+import pandas as pd
+from k_means import k_means
+from sklearn.preprocessing import MinMaxScaler, Normalizer
+from sklearn.decomposition import PCA
 
 # Class for the overall application.
 class Application(tk.Tk):
@@ -21,8 +25,15 @@ class Application(tk.Tk):
         self.window.geometry("800x600+560+210")
 
         # Path to default dataset - this will change based on the filedialog input.
-        self.data_path = os.getcwd() + "\\vgsales.csv"
+        self.data_path = os.getcwd() + "\\data\\abalone.csv"
+        self.data = []
+        self.load_data()
         w, h = 800,600
+
+        # x, y and k to use in the scatter plot/k-means; a widget function will change these
+        self.x = 0
+        self.y = 1
+        self.k = 3
 
         # Dictionary to contain the frames that represent pages
         self.frames = {'Main': MainMenu(self.window, self, w, h),
@@ -30,8 +41,8 @@ class Application(tk.Tk):
         self.frames['Main'].grid(row=0, column=0, sticky="nsew")
         self.frames['Visualization'].grid(row=0, column=0, sticky="nsew")
 
-
         self.load_main()
+
         # Start program loop.
         tk.mainloop()
 
@@ -39,11 +50,29 @@ class Application(tk.Tk):
         frame = self.frames['Main']
         frame.tkraise()
 
+    def load_data(self):
+        # Load dataset.
+        df = pd.read_csv(self.data_path, index_col=0)
+
+        # Remove entries that have infinity or nan attributes.
+        df.replace([np.inf, -np.inf], np.nan, inplace=True)
+        df.dropna()
+
+        # Get attribute names
+        attributes = list(df.columns)
+
+        # Normalize dataset and convert to np array.
+        scaler = Normalizer(norm='l2')
+        self.data = scaler.fit_transform(df)
+
     def load_visualization(self):
-        print(self.data_path)
-        print(self.frames['Main'].pca_flag.get())
+        # Raise visualization frame
         frame = self.frames['Visualization']
         frame.tkraise()
+
+        # Pass data to visualization frame for k-means algorithm and animation.
+        frame.visualize_k_means(self.data)
+
 
 # Class for the main menu; extends the tk.Frame class
 class MainMenu(tk.Frame):
@@ -124,6 +153,7 @@ class MainMenu(tk.Frame):
                 self.entry.delete(0, tk.END)
                 self.entry.insert(0, filename)
                 self.app.data_path = filename
+                self.app.load_data()
 
 # Class for the k-means visualization, extends tkinter Frame.
 class VisualizationFrame(tk.Frame):
@@ -147,21 +177,75 @@ class VisualizationFrame(tk.Frame):
 
         # Conduct K-Means in its entirety and plot graph animation afterwards.
 
+        # Create figure and subplot.
+        self.fig = plt.Figure(figsize=(5, 5), dpi=100)
+        self.ax = self.fig.add_subplot(111)
+        self.scatter = None
+
+        # Aesthetic options
+        self.ax.set_axis_off()
+        #self.ax.set_facecolor('xkcd:black')
+        self.fig.patch.set_facecolor('xkcd:black')
+
+
+
+        # Define the colours for each k.
+        colour1 = (0.69411766529083252, 0.3490196168422699, 0.15686275064945221, 1.0)
+        colour2 = (0.65098041296005249, 0.80784314870834351, 0.89019608497619629, 1.0)
+        colour3 = (0.45098041296005249, 0.50784314870834351, 0.69019608497619629, 1.0)
+        self.colour_map = np.array([colour1, colour2, colour3])
+
+
         # Embed matplotlib graph
-        f = Figure(figsize=(5,5), dpi=100)
-        a = f.add_subplot(111)
-        a.plot([1,2,3,4,5,6,7,8], [5,6,1,3,8,9,3,5])
+        self.canvas = FigureCanvasTkAgg(figure=self.fig, master=self)
+        self.canvas.get_tk_widget().pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
-        canvas = FigureCanvasTkAgg(figure=f, master=self)
-        canvas.get_tk_widget().pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
-        #toolbar = NavigationToolbar2Tk(canvas=canvas, window=self)
-        #toolbar.update()
-        #canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+    def visualize_k_means(self, np_data):
+        # Perform k-means on the given dataset.
+        mu_viz, r_viz, iters = k_means(np_data, k=self.app.k, max_iter=100)
 
-    # Animation function to plot the graph.
-    def animate(self, i):
+        # Create the scatter plot
+        self.scatter = self.ax.scatter([],[])
+        #
+        anim = animation.FuncAnimation(self.fig,
+                                       func=self.animate,
+                                       frames=range(iters),
+                                       fargs=(mu_viz, r_viz, np_data),
+                                       interval=3000,
+                                       repeat_delay=1000,
+                                       blit=False)
+        self.canvas.draw()
+        print("here")
+
+    # Animation function called at each frame.
+    def animate(self, i, *args):
         print("Frame: %i" % i)
+        # Unpack required data: args = (mu_viz, r_viz, np_data).
+        mu_k = args[0][i]  # Current cluster centres
+        r = args[1][:,i]  # Current cluster assignments
+        data = args[2]  # Data to plot
+
+
+        # Add the cluster assignments to the data as a 'label'.
+        #plot_data = np.hstack([np.copy(data), r.reshape(-1, 1)])  # Convert r from 1d to 2d ndarray
+        mu_k = np.hstack([mu_k, [[0], [1], [2]]])
+
+        # Plot data -- update here.
+        self.scatter.set_offsets(data[:,[self.app.x, self.app.y]])
+        self.scatter.set(color=self.colour_map[r])#, color=plot_data[:,-1])
+
+        # Set x/y limits for an appropriate scale.
+        self.ax.set_ylim(min(data[:,self.app.y]), max(data[:,self.app.y]))
+        self.ax.set_xlim(min(data[:,self.app.x]), max(data[:,self.app.x]))
+
+        return self.scatter,
+
+
+
+
+
+
 
 
 

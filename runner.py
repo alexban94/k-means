@@ -7,7 +7,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA
 
 # Load data and scale it
-df = pd.read_csv('customer_kaggle.csv', index_col=0)
+df = pd.read_csv('.\data\customer_kaggle.csv', index_col=0)
 df.replace([np.inf, -np.inf], np.nan, inplace=True)
 df.dropna()
 #df = sns.load_dataset('iris')
