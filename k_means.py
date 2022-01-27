@@ -11,6 +11,8 @@ def k_means(data, k, max_iter):
 
     # Initialise mu_k as randomly selected samples in the dataset
     np.random.seed(seed=1)
+    print(isinstance(k, int))
+    print(isinstance(rows,int))
     mu_k_index = np.random.randint(0, rows, size=(k, 1))
     mu_k = np.zeros([k, columns])
     for i in range(k):

@@ -25,9 +25,10 @@ class Application(tk.Tk):
         self.window.geometry("800x600+560+210")
 
         # Path to default dataset - this will change based on the filedialog input.
-        self.data_path = os.getcwd() + "\\data\\abalone.csv"
+        self.data_path = os.getcwd() + "\\data\\iris.csv"
         self.data = []
-        self.load_data()
+        self.attributes = []
+
         w, h = 800,600
 
         # x, y and k to use in the scatter plot/k-means; a widget function will change these
@@ -35,12 +36,16 @@ class Application(tk.Tk):
         self.y = 1
         self.k = 3
 
+        # PCA flag for check button on the Main menu frame.
+        self.pca_flag = tk.BooleanVar(master=self.window, value=False)
+
         # Dictionary to contain the frames that represent pages
         self.frames = {'Main': MainMenu(self.window, self, w, h),
                        'Visualization': VisualizationFrame(self.window, self, w, h)}
         self.frames['Main'].grid(row=0, column=0, sticky="nsew")
         self.frames['Visualization'].grid(row=0, column=0, sticky="nsew")
 
+        self.load_data()
         self.load_main()
 
         # Start program loop.
@@ -51,27 +56,75 @@ class Application(tk.Tk):
         frame.tkraise()
 
     def load_data(self):
-        # Load dataset.
-        df = pd.read_csv(self.data_path, index_col=0)
+        # Load dataset only if data path exists and is a .csv file.
+        if os.path.exists(self.data_path) and ".csv" in self.data_path:
+            df = pd.read_csv(self.data_path, index_col=0)
 
-        # Remove entries that have infinity or nan attributes.
-        df.replace([np.inf, -np.inf], np.nan, inplace=True)
-        df.dropna()
+            # Remove attributes that are strings.
+            df = df.iloc[:,
+                 [i for i in range(len(df.columns)) if not (df.dtypes.iloc[i] == object or df.dtypes.iloc[i] == str)]]
 
-        # Get attribute names
-        attributes = list(df.columns)
+            # Remove entries that have infinity or nan attributes.
+            df.replace([np.inf, -np.inf], np.nan, inplace=True)
+            df.dropna(inplace=True)
 
-        # Normalize dataset and convert to np array.
-        scaler = Normalizer(norm='l2')
-        self.data = scaler.fit_transform(df)
+            # Get attribute names
+            self.attributes = list(df.columns)
+
+            # Update combo boxes
+            frame = self.frames['Main']
+
+            frame.combo_x['values'] = self.attributes
+            frame.combo_y['values'] = self.attributes
+
+            frame.combo_x.current(self.x)
+            frame.combo_y.current(self.y)
+            # Normalize dataset and convert to np array.
+            scaler = Normalizer(norm='l2')
+            self.data = scaler.fit_transform(df)
+        else:
+            showinfo("Warning", "Dataset path does not exist.")
 
     def load_visualization(self):
+        ## TODO: change these to widget commands
+        # Update x and y variables based on combobox.
+        self.x = self.frames['Main'].combo_x.current()
+        self.y = self.frames['Main'].combo_y.current()
+        # Update k based on spinbox
+        self.k = self.frames['Main'].spin_k.get()
+
+        # Copy data in case of PCA calculations.
+        data = self.data.copy()
+
+        # Check everything is correct and ready to use.
+        if self.x == self.y:
+            showinfo("Warning", "The x and y attributes for the plot are the same.")
+            return
+        elif self.data is []:
+            showinfo("Warning", "Please select a dataset.")
+            return
+
+        # Check if PCA flag has been checked.
+        if self.pca_flag:
+            # Perform PCA.
+            print("Performing PCA")
+            # Override selected attributes to use only x=0 and y=1, to display only the first and second
+            # principal components PC1 and PC2 (the most relevant).
+            self.x = 0
+            self.y = 1
+            # Perform PCA on data
+            pca = PCA(n_components=2)
+            #print(data)
+            data = pca.fit_transform(data)
+            #print(data)
+
+
         # Raise visualization frame
         frame = self.frames['Visualization']
         frame.tkraise()
 
         # Pass data to visualization frame for k-means algorithm and animation.
-        frame.visualize_k_means(self.data)
+        frame.visualize_k_means(data)
 
 
 # Class for the main menu; extends the tk.Frame class
@@ -106,10 +159,9 @@ class MainMenu(tk.Frame):
                              width=25,
                              height=2).pack(side=tk.BOTTOM, pady=50)
 
-        ## PCA Frame for the label and checkbutton.
-        self.pca_flag = tk.BooleanVar(master=window, value=False)
+        ## PCA checkbutton.
         self.check_pca = tk.Checkbutton(master=self,
-                                   variable=self.pca_flag,
+                                   variable=app.pca_flag,
                                    onvalue=True,
                                    offvalue=False,
                                    text="Enable Principal Component Analysis (PCA)?",
@@ -139,6 +191,21 @@ class MainMenu(tk.Frame):
         self.entry.pack(side=tk.LEFT)
         browse.pack(side=tk.LEFT)
 
+        # Combo boxes for selecting the 2 attributes to use.
+        self.combo_x = self.create_combo_box([], 0)
+        self.combo_y = self.create_combo_box([], 0)
+
+        # Spinbox widget for selecting value of k to use.
+        self.spin_k = ttk.Spinbox(master=self, from_=2, to=10, increment=1, wrap=True)
+        self.spin_k.set(3)
+        self.spin_k.pack()
+
+    def create_combo_box(self, attributes, index):
+        combo = ttk.Combobox(master=self, values = attributes)
+        #combo.current(newindex=index)
+        combo.set("Select attribute")
+        combo.pack()
+        return combo
 
 
 
@@ -167,7 +234,7 @@ class VisualizationFrame(tk.Frame):
 
         self.app = app
         btn_exit = tk.Button(master=self,
-                             command=app.load_main,
+                             command=self.return_to_main,
                              relief=tk.RAISED,
                              text="Exit",
                              foreground="white",
@@ -177,17 +244,31 @@ class VisualizationFrame(tk.Frame):
 
         # Conduct K-Means in its entirety and plot graph animation afterwards.
 
+
+
+    def return_to_main(self):
+        # Load main menu
+        self.app.load_main()
+
+        # Destroy current animation
+        plt.close()
+        self.anim.event_source.stop()
+        self.canvas.get_tk_widget().destroy()
+        del self.anim
+
+
+
+    def visualize_k_means(self, np_data):
         # Create figure and subplot.
         self.fig = plt.Figure(figsize=(5, 5), dpi=100)
         self.ax = self.fig.add_subplot(111)
         self.scatter = None
+        self.anim = None
 
         # Aesthetic options
         self.ax.set_axis_off()
-        #self.ax.set_facecolor('xkcd:black')
+        # self.ax.set_facecolor('xkcd:black')
         self.fig.patch.set_facecolor('xkcd:black')
-
-
 
         # Define the colours for each k.
         colour1 = (0.69411766529083252, 0.3490196168422699, 0.15686275064945221, 1.0)
@@ -195,20 +276,17 @@ class VisualizationFrame(tk.Frame):
         colour3 = (0.45098041296005249, 0.50784314870834351, 0.69019608497619629, 1.0)
         self.colour_map = np.array([colour1, colour2, colour3])
 
-
         # Embed matplotlib graph
         self.canvas = FigureCanvasTkAgg(figure=self.fig, master=self)
         self.canvas.get_tk_widget().pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
-
-    def visualize_k_means(self, np_data):
         # Perform k-means on the given dataset.
-        mu_viz, r_viz, iters = k_means(np_data, k=self.app.k, max_iter=100)
+        mu_viz, r_viz, iters = k_means(np_data, k=int(self.app.k), max_iter=100)
 
         # Create the scatter plot
         self.scatter = self.ax.scatter([],[])
         #
-        anim = animation.FuncAnimation(self.fig,
+        self.anim = animation.FuncAnimation(self.fig,
                                        func=self.animate,
                                        frames=range(iters),
                                        fargs=(mu_viz, r_viz, np_data),
@@ -232,6 +310,7 @@ class VisualizationFrame(tk.Frame):
         mu_k = np.hstack([mu_k, [[0], [1], [2]]])
 
         # Plot data -- update here.
+        #print(data)
         self.scatter.set_offsets(data[:,[self.app.x, self.app.y]])
         self.scatter.set(color=self.colour_map[r])#, color=plot_data[:,-1])
 
