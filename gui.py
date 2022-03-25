@@ -17,6 +17,9 @@ from k_means import k_means
 from sklearn.preprocessing import MinMaxScaler, Normalizer
 from sklearn.decomposition import PCA
 
+## TODO: not using the correct attributes in k-means.
+## TODO: remove outliers from clustering and the plots.
+
 # Class for the overall application.
 class Application(tk.Tk):
     def __init__(self):
@@ -25,7 +28,7 @@ class Application(tk.Tk):
         self.window.geometry("800x600+560+210")
 
         # Path to default dataset - this will change based on the filedialog input.
-        self.data_path = os.getcwd() + "\\data\\iris.csv"
+        self.data_path = os.getcwd() + "\\data\\abalone.csv"
         self.data = []
         self.attributes = []
 
@@ -79,9 +82,11 @@ class Application(tk.Tk):
 
             frame.combo_x.current(self.x)
             frame.combo_y.current(self.y)
+
             # Normalize dataset and convert to np array.
-            scaler = Normalizer(norm='l2')
-            self.data = scaler.fit_transform(df)
+            #scaler = Normalizer(norm='l2')
+            #self.data = scaler.fit_transform(df)
+            self.data = df
         else:
             showinfo("Warning", "Dataset path does not exist.")
 
@@ -94,7 +99,7 @@ class Application(tk.Tk):
         self.k = self.frames['Main'].spin_k.get()
 
         # Copy data in case of PCA calculations.
-        data = self.data.copy()
+        data = self.data.to_numpy()
 
         # Check everything is correct and ready to use.
         if self.x == self.y:
@@ -105,7 +110,7 @@ class Application(tk.Tk):
             return
 
         # Check if PCA flag has been checked.
-        if self.pca_flag:
+        if self.pca_flag.get():
             # Perform PCA.
             print("Performing PCA")
             # Override selected attributes to use only x=0 and y=1, to display only the first and second
@@ -114,7 +119,6 @@ class Application(tk.Tk):
             self.y = 1
             # Perform PCA on data
             pca = PCA(n_components=2)
-            #print(data)
             data = pca.fit_transform(data)
             #print(data)
 
@@ -124,7 +128,7 @@ class Application(tk.Tk):
         frame.tkraise()
 
         # Pass data to visualization frame for k-means algorithm and animation.
-        frame.visualize_k_means(data)
+        frame.visualize_k_means(data[:, [self.x, self.y]], [self.frames['Main'].combo_x.get(), self.frames['Main'].combo_y.get()])
 
 
 # Class for the main menu; extends the tk.Frame class
@@ -196,7 +200,7 @@ class MainMenu(tk.Frame):
         self.combo_y = self.create_combo_box([], 0)
 
         # Spinbox widget for selecting value of k to use.
-        self.spin_k = ttk.Spinbox(master=self, from_=2, to=10, increment=1, wrap=True)
+        self.spin_k = ttk.Spinbox(master=self, from_=2, to=20, increment=1, wrap=True)
         self.spin_k.set(3)
         self.spin_k.pack()
 
@@ -258,17 +262,27 @@ class VisualizationFrame(tk.Frame):
 
 
 
-    def visualize_k_means(self, np_data):
+    def visualize_k_means(self, np_data, attributes):
         # Create figure and subplot.
         self.fig = plt.Figure(figsize=(5, 5), dpi=100)
-        self.ax = self.fig.add_subplot(111)
+        self.ax = self.fig.add_subplot(111, xlabel=attributes[0], ylabel=attributes[1])
         self.scatter = None
         self.anim = None
 
         # Aesthetic options
-        self.ax.set_axis_off()
-        # self.ax.set_facecolor('xkcd:black')
+        #self.ax.set_axis_off()
+
+        # Black background
+        self.ax.set_facecolor('xkcd:black')
         self.fig.patch.set_facecolor('xkcd:black')
+
+        # White axes
+        for spine in self.ax.spines:
+            self.ax.spines[spine].set_color('white')
+        self.ax.xaxis.label.set_color('white')
+        self.ax.yaxis.label.set_color('white')
+        self.ax.tick_params(colors='white')
+        self.ax.set_title("", color="white")
 
         # Define the colours for each k.
         colour1 = (0.69411766529083252, 0.3490196168422699, 0.15686275064945221, 1.0)
@@ -281,44 +295,50 @@ class VisualizationFrame(tk.Frame):
         self.canvas.get_tk_widget().pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
         # Perform k-means on the given dataset.
-        mu_viz, r_viz, iters = k_means(np_data, k=int(self.app.k), max_iter=100)
+        mu_viz, r_viz, iters = k_means(np_data, k=int(self.app.k), max_iter=1000)
 
-        # Create the scatter plot
-        self.scatter = self.ax.scatter([],[])
-        #
+        # Create the scatter plots
+        self.scatter_data = self.ax.scatter([],[], marker='x') # For the data
+        self.scatter_mu = self.ax.scatter([],[], marker='2', color="lawngreen") # For the moving cluster centres.
+        # FuncAnimation
         self.anim = animation.FuncAnimation(self.fig,
                                        func=self.animate,
                                        frames=range(iters),
-                                       fargs=(mu_viz, r_viz, np_data),
-                                       interval=3000,
+                                       fargs=(mu_viz, r_viz, np_data, iters),
+                                       interval=500,
                                        repeat_delay=1000,
                                        blit=False)
         self.canvas.draw()
-        print("here")
+
 
     # Animation function called at each frame.
     def animate(self, i, *args):
-        print("Frame: %i" % i)
+        # print("Frame: %i" % i)
         # Unpack required data: args = (mu_viz, r_viz, np_data).
         mu_k = args[0][i]  # Current cluster centres
         r = args[1][:,i]  # Current cluster assignments
         data = args[2]  # Data to plot
-
+        iters = args[3] # Convergence iteration
 
         # Add the cluster assignments to the data as a 'label'.
         #plot_data = np.hstack([np.copy(data), r.reshape(-1, 1)])  # Convert r from 1d to 2d ndarray
         mu_k = np.hstack([mu_k, [[0], [1], [2]]])
 
         # Plot data -- update here.
-        #print(data)
-        self.scatter.set_offsets(data[:,[self.app.x, self.app.y]])
-        self.scatter.set(color=self.colour_map[r])#, color=plot_data[:,-1])
+        self.scatter_data.set_offsets(data)
+        self.scatter_data.set(color=self.colour_map[r])#, color=plot_data[:,-1])
+
+        # Plot cluster centres
+        self.scatter_mu.set_offsets(mu_k[:,0:2])
 
         # Set x/y limits for an appropriate scale.
-        self.ax.set_ylim(min(data[:,self.app.y]), max(data[:,self.app.y]))
-        self.ax.set_xlim(min(data[:,self.app.x]), max(data[:,self.app.x]))
+        self.ax.set_ylim(min(data[:,1]), max(data[:,1]))
+        self.ax.set_xlim(min(data[:,0]), max(data[:,0]))
 
-        return self.scatter,
+        # Update title
+        self.ax.set_title("K-means iteration: %i of %i" % (i + 1, iters))
+
+        return self.scatter_data,
 
 
 

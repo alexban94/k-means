@@ -11,8 +11,7 @@ def k_means(data, k, max_iter):
 
     # Initialise mu_k as randomly selected samples in the dataset
     np.random.seed(seed=1)
-    print(isinstance(k, int))
-    print(isinstance(rows,int))
+
     mu_k_index = np.random.randint(0, rows, size=(k, 1))
     mu_k = np.zeros([k, columns])
     for i in range(k):
@@ -62,7 +61,7 @@ def k_means(data, k, max_iter):
         # r_nk and mu_k assigned for this iteration, store data for visualization.
         # For ease, animation is done once the K-Means process is finished.
         # Update cluster centres, mu_viz
-        mu_viz.append(mu_k)
+        mu_viz.append(np.copy(mu_k))
         # Update cluster assignments, r_viz
         r_viz.append(update_assignments(data, r_nk))
 
