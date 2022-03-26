@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter.font import BOLD, Font
@@ -39,8 +40,9 @@ class Application(tk.Tk):
         self.y = 1
         self.k = 3
 
-        # PCA flag for check button on the Main menu frame.
+        # PCA and save flag for check button on the Main menu frame.
         self.pca_flag = tk.BooleanVar(master=self.window, value=False)
+        self.save_flag = tk.BooleanVar(master=self.window, value=False)
 
         # Dictionary to contain the frames that represent pages
         self.frames = {'Main': MainMenu(self.window, self, w, h),
@@ -99,7 +101,7 @@ class Application(tk.Tk):
         self.k = self.frames['Main'].spin_k.get()
 
         # Copy data in case of PCA calculations.
-        data = self.data.to_numpy()
+        data = self.data.copy().to_numpy()
 
         # Check everything is correct and ready to use.
         if self.x == self.y:
@@ -108,27 +110,31 @@ class Application(tk.Tk):
         elif self.data is []:
             showinfo("Warning", "Please select a dataset.")
             return
+        # Record axis labels
+        axis_labels = [self.frames['Main'].combo_x.get(), self.frames['Main'].combo_y.get()]
 
         # Check if PCA flag has been checked.
         if self.pca_flag.get():
-            # Perform PCA.
-            print("Performing PCA")
             # Override selected attributes to use only x=0 and y=1, to display only the first and second
             # principal components PC1 and PC2 (the most relevant).
             self.x = 0
             self.y = 1
-            # Perform PCA on data
+            axis_labels = ['PC1', 'PC2']
+
+            # Normalize data.
+            scaler = Normalizer(norm='l2')
+            data = scaler.fit_transform(data)
+
+            # Perform PCA on data.
             pca = PCA(n_components=2)
             data = pca.fit_transform(data)
-            #print(data)
-
 
         # Raise visualization frame
         frame = self.frames['Visualization']
         frame.tkraise()
 
         # Pass data to visualization frame for k-means algorithm and animation.
-        frame.visualize_k_means(data[:, [self.x, self.y]], [self.frames['Main'].combo_x.get(), self.frames['Main'].combo_y.get()])
+        frame.visualize_k_means(data[:, [self.x, self.y]], axis_labels, save=self.save_flag.get())
 
 
 # Class for the main menu; extends the tk.Frame class
@@ -172,6 +178,16 @@ class MainMenu(tk.Frame):
                                    font=Font(family="Arial", size=10)
                                    )
         self.check_pca.pack()
+
+        ## Save animation checkbutton.
+        self.check_save = tk.Checkbutton(master=self,
+                                        variable=app.save_flag,
+                                        onvalue=True,
+                                        offvalue=False,
+                                        text="Save animation (requires FFmpeg) ?",
+                                        font=Font(family="Arial", size=10)
+                                        )
+        self.check_save.pack()
 
         ## Frame for file browser
         frame_files = tk.Frame(master=self)
@@ -217,7 +233,7 @@ class MainMenu(tk.Frame):
 
             filename = fd.askopenfilename(
                 title='Choose a dataset',
-                initialdir='/',
+                initialdir= os.getcwd(),
                 filetypes=[('.csv files', '*.csv')]
             )
             if filename != "":
@@ -234,43 +250,32 @@ class VisualizationFrame(tk.Frame):
                          width=w,
                          height=h
                          )
-        self.grid_propagate(0)
+        ##TODO: what is this
+        #self.grid_propagate(0)
 
         self.app = app
-        btn_exit = tk.Button(master=self,
-                             command=self.return_to_main,
-                             relief=tk.RAISED,
-                             text="Exit",
-                             foreground="white",
-                             background="black",
-                             width=25,
-                             height=2).pack()
+        self.img = tk.PhotoImage(file=r'cancel.png').subsample(13,13) # keep reference to avoid garbage collection
+        self.btn_exit = tk.Button(master=self,
+                                  text='exit',
+                                  command=self.return_to_main,
+                                  image=self.img,
+                                  width='25',
+                                  height='25',
+                                  bd=0 # border pixels
+                                  )
 
-        # Conduct K-Means in its entirety and plot graph animation afterwards.
-
-
-
-    def return_to_main(self):
-        # Load main menu
-        self.app.load_main()
-
-        # Destroy current animation
-        plt.close()
-        self.anim.event_source.stop()
-        self.canvas.get_tk_widget().destroy()
-        del self.anim
-
-
-
-    def visualize_k_means(self, np_data, attributes):
         # Create figure and subplot.
         self.fig = plt.Figure(figsize=(5, 5), dpi=100)
-        self.ax = self.fig.add_subplot(111, xlabel=attributes[0], ylabel=attributes[1])
-        self.scatter = None
+        self.ax = self.fig.add_subplot(111)
+
+        # Initialize class variables to be used in the FuncAnimation.
+        self.scatter_data = None
+        self.scatter_mu = None
+        self.canvas = None # Canvas is not created here as it is made/destroyed on start/exit.
         self.anim = None
 
         # Aesthetic options
-        #self.ax.set_axis_off()
+        # self.ax.set_axis_off()
 
         # Black background
         self.ax.set_facecolor('xkcd:black')
@@ -284,31 +289,60 @@ class VisualizationFrame(tk.Frame):
         self.ax.tick_params(colors='white')
         self.ax.set_title("", color="white")
 
-        # Define the colours for each k.
-        colour1 = (0.69411766529083252, 0.3490196168422699, 0.15686275064945221, 1.0)
-        colour2 = (0.65098041296005249, 0.80784314870834351, 0.89019608497619629, 1.0)
-        colour3 = (0.45098041296005249, 0.50784314870834351, 0.69019608497619629, 1.0)
-        self.colour_map = np.array([colour1, colour2, colour3])
+        # Colour map to use for the different clusters.
+        self.cmap = plt.get_cmap('Accent')
 
-        # Embed matplotlib graph
+
+
+
+    def return_to_main(self):
+        # Load main menu
+        self.app.load_main()
+        # Destroy current animation
+        plt.close()
+        self.anim.event_source.stop()
+        self.canvas.get_tk_widget().destroy()
+        del self.anim
+
+
+    def visualize_k_means(self, np_data, attributes, save=False):
+        # Set axis labels.
+        self.ax.set_xlabel(attributes[0])
+        self.ax.set_ylabel(attributes[1])
+
+        # Embed matplotlib graph animation
         self.canvas = FigureCanvasTkAgg(figure=self.fig, master=self)
         self.canvas.get_tk_widget().pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
+        # Place exit button on top of canvas
+        self.btn_exit.place(in_=self.canvas.get_tk_widget(), relx=0,rely=0, anchor="nw")
+        self.btn_exit.tkraise()
 
         # Perform k-means on the given dataset.
         mu_viz, r_viz, iters = k_means(np_data, k=int(self.app.k), max_iter=1000)
+        print("k %i" % int(self.app.k))
+        print("max all r %i" % int(max([max(r) for r in r_viz])))
+        #exit()
 
         # Create the scatter plots
-        self.scatter_data = self.ax.scatter([],[], marker='x') # For the data
+        self.scatter_data = self.ax.scatter([],[], marker='x', cmap='Accent') # For the data
         self.scatter_mu = self.ax.scatter([],[], marker='2', color="lawngreen") # For the moving cluster centres.
+
         # FuncAnimation
         self.anim = animation.FuncAnimation(self.fig,
-                                       func=self.animate,
-                                       frames=range(iters),
-                                       fargs=(mu_viz, r_viz, np_data, iters),
-                                       interval=500,
-                                       repeat_delay=1000,
-                                       blit=False)
+                                            func=self.animate,
+                                            frames=iters,
+                                            save_count=iters,
+                                            fargs=(mu_viz, r_viz, np_data, iters),
+                                            interval=100,
+                                            repeat_delay=250,
+                                            blit=False)
         self.canvas.draw()
+
+        # Save animation if flagged to do so.
+        if save:
+            date = datetime.now().strftime("%Y_%m_%d-%I_%M_%S_%p")
+            writer = animation.FFMpegWriter(fps=30)
+            self.anim.save('%i-means-x_%s_y_%s-%s.mp4' % (int(self.app.k), attributes[0], attributes[1], date), writer=writer)
 
 
     # Animation function called at each frame.
@@ -320,14 +354,15 @@ class VisualizationFrame(tk.Frame):
         data = args[2]  # Data to plot
         iters = args[3] # Convergence iteration
 
-        # Add the cluster assignments to the data as a 'label'.
-        #plot_data = np.hstack([np.copy(data), r.reshape(-1, 1)])  # Convert r from 1d to 2d ndarray
-        mu_k = np.hstack([mu_k, [[0], [1], [2]]])
-
-        # Plot data -- update here.
+        # Plot data and set colours from using the cluster labels with the chosen colour map.
         self.scatter_data.set_offsets(data)
-        self.scatter_data.set(color=self.colour_map[r])#, color=plot_data[:,-1])
+        r_norm = r/max(r) # Equivalent to using norm = matplotlib.colors.Normalize(vmin=0, vmax=k-1)
 
+       # print("k = " + str(self.app.k))
+       # print("max r = " + str(max(r)))
+       # print("max r norm = " + str(max(r_norm)))
+        #print(r)
+        self.scatter_data.set_color(self.cmap(r))
         # Plot cluster centres
         self.scatter_mu.set_offsets(mu_k[:,0:2])
 
@@ -336,7 +371,7 @@ class VisualizationFrame(tk.Frame):
         self.ax.set_xlim(min(data[:,0]), max(data[:,0]))
 
         # Update title
-        self.ax.set_title("K-means iteration: %i of %i" % (i + 1, iters))
+        self.ax.set_title("Iteration: %i of %i" % (i + 1, iters))
 
         return self.scatter_data,
 

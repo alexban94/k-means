@@ -114,18 +114,14 @@ def update_visualisation(frame, *args):
     return
 
 
-
+## Map binary assignments r_nk to a class label from 0 to k-1.
 def update_assignments(data, r_nk):
     # Convert r_nk into a 'class' for colour separation
     rows, col  = data.shape
     labels = np.empty([rows, 1])
     for i in range(rows):
-        if r_nk[i,1] == 1:
-            labels[i,:] = 0
-        elif r_nk[i,2] == 1:
-            labels[i,:] = 1
-        else:
-            labels[i,:] = 2
+        labels[i,:] = np.argmax(r_nk[i,:])
+
     return labels.astype(int)
 
 
