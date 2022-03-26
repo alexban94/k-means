@@ -184,7 +184,7 @@ class MainMenu(tk.Frame):
                                         variable=app.save_flag,
                                         onvalue=True,
                                         offvalue=False,
-                                        text="Save animation (requires FFmpeg) ?",
+                                        text="Save animation? (requires FFmpeg)",
                                         font=Font(family="Arial", size=10)
                                         )
         self.check_save.pack()
@@ -222,7 +222,6 @@ class MainMenu(tk.Frame):
 
     def create_combo_box(self, attributes, index):
         combo = ttk.Combobox(master=self, values = attributes)
-        #combo.current(newindex=index)
         combo.set("Select attribute")
         combo.pack()
         return combo
@@ -274,13 +273,10 @@ class VisualizationFrame(tk.Frame):
         self.canvas = None # Canvas is not created here as it is made/destroyed on start/exit.
         self.anim = None
 
-        # Aesthetic options
-        # self.ax.set_axis_off()
-
+        ## Aesthetic options
         # Black background
         self.ax.set_facecolor('xkcd:black')
         self.fig.patch.set_facecolor('xkcd:black')
-
         # White axes
         for spine in self.ax.spines:
             self.ax.spines[spine].set_color('white')
@@ -288,11 +284,8 @@ class VisualizationFrame(tk.Frame):
         self.ax.yaxis.label.set_color('white')
         self.ax.tick_params(colors='white')
         self.ax.set_title("", color="white")
-
         # Colour map to use for the different clusters.
-        self.cmap = plt.get_cmap('Accent')
-
-
+        self.cmap = plt.get_cmap('tab20') # other options: 'tab20', 'tab20b', 'tab20c', 'rainbow'
 
 
     def return_to_main(self):
@@ -319,13 +312,10 @@ class VisualizationFrame(tk.Frame):
 
         # Perform k-means on the given dataset.
         mu_viz, r_viz, iters = k_means(np_data, k=int(self.app.k), max_iter=1000)
-        print("k %i" % int(self.app.k))
-        print("max all r %i" % int(max([max(r) for r in r_viz])))
-        #exit()
 
-        # Create the scatter plots
-        self.scatter_data = self.ax.scatter([],[], marker='x', cmap='Accent') # For the data
-        self.scatter_mu = self.ax.scatter([],[], marker='2', color="lawngreen") # For the moving cluster centres.
+        # Create the scatter plots. By default marker size s=36.
+        self.scatter_data = self.ax.scatter([],[], marker='x', s=18) # For the data
+        self.scatter_mu = self.ax.scatter([],[], marker='D', color="white", s=22) # For the moving cluster centres.
 
         # FuncAnimation
         self.anim = animation.FuncAnimation(self.fig,
@@ -357,12 +347,7 @@ class VisualizationFrame(tk.Frame):
         # Plot data and set colours from using the cluster labels with the chosen colour map.
         self.scatter_data.set_offsets(data)
         r_norm = r/max(r) # Equivalent to using norm = matplotlib.colors.Normalize(vmin=0, vmax=k-1)
-
-       # print("k = " + str(self.app.k))
-       # print("max r = " + str(max(r)))
-       # print("max r norm = " + str(max(r_norm)))
-        #print(r)
-        self.scatter_data.set_color(self.cmap(r))
+        self.scatter_data.set_color(self.cmap(r_norm))
         # Plot cluster centres
         self.scatter_mu.set_offsets(mu_k[:,0:2])
 
