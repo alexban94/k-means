@@ -7,11 +7,9 @@ from tkinter import filedialog as fd
 from tkinter.messagebox import showinfo
 import matplotlib
 matplotlib.use("TkAgg")
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-#from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
-import time
 import numpy as np
 import pandas as pd
 from k_means import k_means
@@ -93,7 +91,6 @@ class Application(tk.Tk):
             showinfo("Warning", "Dataset path does not exist.")
 
     def load_visualization(self):
-        ## TODO: change these to widget commands
         # Update x and y variables based on combobox.
         self.x = self.frames['Main'].combo_x.current()
         self.y = self.frames['Main'].combo_y.current()
@@ -101,7 +98,10 @@ class Application(tk.Tk):
         self.k = self.frames['Main'].spin_k.get()
 
         # Copy data in case of PCA calculations.
-        data = self.data.copy().to_numpy()
+        if isinstance(self.data, np.ndarray):
+            data = self.data.copy().to_numpy()
+        else:
+            data = self.data
 
         # Check everything is correct and ready to use.
         if self.x == self.y:
@@ -157,27 +157,20 @@ class MainMenu(tk.Frame):
                  foreground="white",
                  background="black",
                  width=50,
-                 height=2).pack(side=tk.TOP)
+                 height=2).pack(pady=(50,0))
 
-        # Start button widget
-        btn_load = tk.Button(master=self,
-                             command=app.load_visualization,
-                             relief=tk.RAISED,
-                             text="Start",
-                             foreground="white",
-                             background="grey",
-                             width=25,
-                             height=2).pack(side=tk.BOTTOM, pady=50)
 
         ## PCA checkbutton.
         self.check_pca = tk.Checkbutton(master=self,
-                                   variable=app.pca_flag,
-                                   onvalue=True,
-                                   offvalue=False,
-                                   text="Enable Principal Component Analysis (PCA)?",
-                                   font=Font(family="Arial", size=10)
+                                        variable=app.pca_flag,
+                                        onvalue=True,
+                                        offvalue=False,
+                                        text="Enable Principal Component Analysis (PCA)?",
+                                        font=Font(family="Arial", size=10),
+                                        background='black', foreground='white',
+                                        activeforeground='white', selectcolor="black"
                                    )
-        self.check_pca.pack()
+        self.check_pca.pack()#pady=(25,0))
 
         ## Save animation checkbutton.
         self.check_save = tk.Checkbutton(master=self,
@@ -185,7 +178,9 @@ class MainMenu(tk.Frame):
                                         onvalue=True,
                                         offvalue=False,
                                         text="Save animation? (requires FFmpeg)",
-                                        font=Font(family="Arial", size=10)
+                                        font=Font(family="Arial", size=10),
+                                        background='black', foreground='white',
+                                        activeforeground='white', selectcolor="black"
                                         )
         self.check_save.pack()
 
@@ -207,23 +202,49 @@ class MainMenu(tk.Frame):
                           background="black",
                           width=10,
                           height=1)
-        frame_files.pack(side=tk.LEFT, padx=50)
+        frame_files.pack(side=tk.BOTTOM, padx=50, pady=(0,100))
         self.entry.pack(side=tk.LEFT)
         browse.pack(side=tk.LEFT)
 
-        # Combo boxes for selecting the 2 attributes to use.
-        self.combo_x = self.create_combo_box([], 0)
-        self.combo_y = self.create_combo_box([], 0)
-
         # Spinbox widget for selecting value of k to use.
-        self.spin_k = ttk.Spinbox(master=self, from_=2, to=20, increment=1, wrap=True)
+        frame_spin = tk.Frame(master=self)
+        label = tk.Label(master=frame_spin, text="Select k:", background='black', foreground='white')
+        self.spin_k = ttk.Spinbox(master=frame_spin, from_=2, to=20, increment=1, wrap=True,
+                                        foreground='black', background="black")
         self.spin_k.set(3)
-        self.spin_k.pack()
 
-    def create_combo_box(self, attributes, index):
-        combo = ttk.Combobox(master=self, values = attributes)
+        # Pack spinbox widgets.
+        label.pack(side=tk.LEFT)
+        self.spin_k.pack(side=tk.RIGHT)
+        frame_spin.pack(pady=(40,0))
+
+        # Combo boxes for selecting the 2 attributes to use.
+        self.combo_x = self.create_combo_box([],'x')
+        self.combo_y = self.create_combo_box([],'y')
+
+        # Start button widget
+        btn_load = tk.Button(master=self,
+                             command=app.load_visualization,
+                             relief=tk.RAISED,
+                             text="Start",
+                             foreground="white",
+                             background="grey",
+                             width=25,
+                             height=2).pack(pady=(80, 0))
+
+
+
+    def create_combo_box(self, attributes, axis):
+        # Frame to join the label and combobox together.
+        frame = tk.Frame(master=self)
+        combo = ttk.Combobox(master=frame, values = attributes)
         combo.set("Select attribute")
-        combo.pack()
+        label = tk.Label(master=frame, text="Select %s attribute:" % axis, background='black',foreground='white')
+
+        label.pack(side=tk.LEFT)
+        combo.pack(side=tk.RIGHT)
+        frame.pack()
+
         return combo
 
 
@@ -315,7 +336,7 @@ class VisualizationFrame(tk.Frame):
 
         # Create the scatter plots. By default marker size s=36.
         self.scatter_data = self.ax.scatter([],[], marker='x', s=18) # For the data
-        self.scatter_mu = self.ax.scatter([],[], marker='D', color="white", s=22) # For the moving cluster centres.
+        self.scatter_mu = self.ax.scatter([],[], marker='D', edgecolors='white', facecolors='lawngreen', s=25) # For the moving cluster centres.
 
         # FuncAnimation
         self.anim = animation.FuncAnimation(self.fig,
