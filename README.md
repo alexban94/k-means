@@ -7,5 +7,6 @@ Implemented as a form of the expectation-maximization algorithm using ``numpy``,
 
 Only the two selected attributes are used when running the program normally. Non-numerical dataset attributes and rows with missing values are excluded automatically. When PCA is selected, it overrides the chosen attributes and will instead perform PCA on the entire dataset, and use the first 2 principal components.
 
+Run the program by executing ``python gui.py`` from the terminal in the working directory. Requires ``numpy``,``sklearn``,``pandas``,``matplotlib`` and ``tkinter``.
 
 The abalone dataset is provided by the <a href="https://archive.ics.uci.edu/ml/datasets/abalone" >UCI Machine Learning repository</a>, and the ``cancel.jpg`` icon was sourced from <a href="https://www.flaticon.com/free-icons/close" title="close icons">Flaticon</a>.
