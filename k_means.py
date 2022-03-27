@@ -1,8 +1,5 @@
 import numpy as np
-import seaborn as sns
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import pandas as pd
 
 def k_means(data, k, max_iter):
     rows, columns = data.shape

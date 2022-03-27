@@ -16,9 +16,6 @@ from k_means import k_means
 from sklearn.preprocessing import MinMaxScaler, Normalizer
 from sklearn.decomposition import PCA
 
-## TODO: not using the correct attributes in k-means.
-## TODO: remove outliers from clustering and the plots.
-
 # Class for the overall application.
 class Application(tk.Tk):
     def __init__(self):
@@ -380,16 +377,6 @@ class VisualizationFrame(tk.Frame):
         self.ax.set_title("Iteration: %i of %i" % (i + 1, iters))
 
         return self.scatter_data,
-
-
-
-
-
-
-
-
-
-
 
 
 
